@@ -18,7 +18,8 @@
 * Assembling slices to a single image diplay
 * NaN-aware image color normalization
 """
-
+#todo: check again python version and type annotation
+from __future__ import annotations
 from typing import Optional, Sequence
 
 import numpy as np

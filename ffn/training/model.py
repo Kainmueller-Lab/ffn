@@ -114,7 +114,7 @@ class FFNModel(object):
     self.input_seed.set_shape([self.batch_size] +
                               list(self.input_seed_size[::-1]) + [1])
     self.input_patches.set_shape([self.batch_size] +
-                                 list(self.input_image_size[::-1]) + [1])
+                                 list(self.input_image_size[::-1]) + [3])
 
   def set_up_sigmoid_pixelwise_loss(self, logits):
     """Sets up the loss function of the model."""

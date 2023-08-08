@@ -37,6 +37,7 @@ from ffn.inference import storage
 from ffn.utils import bounding_box
 
 import h5py
+import zarr
 import numpy as np
 from scipy.ndimage import filters
 
@@ -219,39 +220,49 @@ def adjust_bboxes(bboxes, lom_radius):
 def main(argv):
   del argv  # Unused.
   path, dataset = FLAGS.input_volume.split(':')
-  with h5py.File(path) as f:
-    segmentation = f[dataset]
-    bboxes = []
-    for name, v in segmentation.attrs.items():
-      if name.startswith('bounding_boxes'):
-        for bbox in v:
-          bboxes.append(bounding_box.BoundingBox(bbox[0], bbox[1]))
+  if path.endswith("hdf") or path.endswith("h5"):
+      f = h5py.File(path)
+  elif path.endswith("zarr"):
+      f = zarr.open(path, "r")
+  else:
+      raise NotImplementedError
 
-    if not bboxes:
-      bboxes.append(
-          bounding_box.BoundingBox(
-              start=(0, 0, 0), size=segmentation.shape[::-1]))
+  segmentation = f[dataset]
 
-    shape = segmentation.shape
-    lom_radius = [int(x) for x in FLAGS.lom_radius]
-    corner, partitions = compute_partitions(
-        segmentation[...], [float(x) for x in FLAGS.thresholds], lom_radius,
-        FLAGS.id_whitelist, FLAGS.exclusion_regions, FLAGS.mask_configs,
-        FLAGS.min_size)
+  bboxes = []
+  shape = segmentation.shape
+  for name, v in segmentation.attrs.items():
+    if name.startswith('bounding_boxes'):
+      for bbox in v:
+        bboxes.append(bounding_box.BoundingBox(bbox[0], bbox[1]))
+
+  if not bboxes:
+    bboxes.append(
+            bounding_box.BoundingBox(
+                start=(0, 0, 0), size=shape[::-1]))
+
+  lom_radius = [int(x) for x in FLAGS.lom_radius]
+
+  corner, partitions = compute_partitions(
+          segmentation[...], [float(x) for x in FLAGS.thresholds], lom_radius,
+          FLAGS.id_whitelist, FLAGS.exclusion_regions, FLAGS.mask_configs,
+          FLAGS.min_size)
+  if path.endswith("hdf") or path.endswith("h5"):
+    f.close()
 
   bboxes = adjust_bboxes(bboxes, np.array(lom_radius))
 
   path, dataset = FLAGS.output_volume.split(':')
   with h5py.File(path, 'w') as f:
     ds = f.create_dataset(dataset, shape=shape, dtype=np.uint8, fillvalue=255,
-                          chunks=True, compression='gzip')
+            chunks=True, compression='gzip')
     s = partitions.shape
     ds[corner[2]:corner[2] + s[0],
-       corner[1]:corner[1] + s[1],
-       corner[0]:corner[0] + s[2]] = partitions
+            corner[1]:corner[1] + s[1],
+            corner[0]:corner[0] + s[2]] = partitions
     ds.attrs['bounding_boxes'] = [(b.start, b.size) for b in bboxes]
     ds.attrs['partition_counts'] = np.array(np.unique(partitions,
-                                                      return_counts=True))
+        return_counts=True))
 
 
 if __name__ == '__main__':

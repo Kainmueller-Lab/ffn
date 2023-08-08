@@ -77,6 +77,9 @@ def main(argv):
 
       uniques, counts = np.unique(partitions, return_counts=True)
       for val, cnt in zip(uniques, counts):
+        # add val==0 continue here? take out background
+        if val == 0:
+          continue
         if val == IGNORE_PARTITION:
           continue
 

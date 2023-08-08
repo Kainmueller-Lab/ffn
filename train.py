@@ -30,6 +30,7 @@ import random
 import time
 
 import h5py
+import zarr
 import numpy as np
 
 import PIL
@@ -130,7 +131,7 @@ flags.DEFINE_list('image_offset_scale_map', None,
                   'Every entry in the list is a colon-separated tuple of: '
                   'volume_label, offset, scale.')
 
-flags.DEFINE_list('permutable_axes', ['1', '2'],
+flags.DEFINE_list('permutable_axes', ['0', '1', '2'],
                   'List of integers equal to a subset of [0, 1, 2] specifying '
                   'which of the [z, y, x] axes, respectively, may be permuted '
                   'in order to augment the training data.')
@@ -355,12 +356,23 @@ def define_data_input(model, queue_batch=None):
   label_volume_map = {}
   for vol in FLAGS.label_volumes.split(','):
     volname, path, dataset = vol.split(':')
-    label_volume_map[volname] = h5py.File(path)[dataset]
+    if path.endswith(".hdf") or path.endswith(".h5"):
+      label_volume_map[volname] = h5py.File(path)[dataset]
+    elif path.endswith(".zarr"):
+      label_volume_map[volname] = zarr.open(path, "r")[dataset]
+    else:
+      raise NotImplementedError
 
   image_volume_map = {}
   for vol in FLAGS.data_volumes.split(','):
     volname, path, dataset = vol.split(':')
-    image_volume_map[volname] = h5py.File(path)[dataset]
+    print("path: ", path)
+    if path.endswith(".hdf") or path.endswith(".h5"):
+      image_volume_map[volname] = h5py.File(path)[dataset]
+    elif path.endswith(".zarr"):
+      image_volume_map[volname] = zarr.open(path, "r")[dataset]
+    else:
+      raise NotImplementedError
 
   if queue_batch is None:
     queue_batch = FLAGS.batch_size
@@ -390,13 +402,13 @@ def define_data_input(model, queue_batch=None):
   # Load image data.
   patch = inputs.load_from_numpylike(
       coord, volname, image_size, image_volume_map)
-  data_shape = [1] + image_size[::-1] + [1]
+  data_shape = [1] + image_size[::-1] + [3]
   patch = tf.reshape(patch, shape=data_shape)
-
-  if ((FLAGS.image_stddev is None or FLAGS.image_mean is None) and
-      not FLAGS.image_offset_scale_map):
-    raise ValueError('--image_mean, --image_stddev or --image_offset_scale_map '
-                     'need to be defined')
+  # normalization taken out, already done in preprocessing
+  #if ((FLAGS.image_stddev is None or FLAGS.image_mean is None) and
+  #    not FLAGS.image_offset_scale_map):
+  #  raise ValueError('--image_mean, --image_stddev or --image_offset_scale_map '
+  #                   'need to be defined')
 
   # Convert segmentation into a soft object mask.
   lom = tf.logical_and(
@@ -417,11 +429,11 @@ def define_data_input(model, queue_batch=None):
   loss_weights = transform_axes(loss_weights)
 
   # Normalize image data.
-  patch = inputs.offset_and_scale_patches(
-      patch, volname[0],
-      offset_scale_map=_get_offset_and_scale_map(),
-      default_offset=FLAGS.image_mean,
-      default_scale=FLAGS.image_stddev)
+  #patch = inputs.offset_and_scale_patches(
+  #    patch, volname[0],
+  #    offset_scale_map=_get_offset_and_scale_map(),
+  #    default_offset=FLAGS.image_mean,
+  #    default_scale=FLAGS.image_stddev)
 
   # Create a batch of examples. Note that any TF operation before this line
   # will be hidden behind a queue, so expensive/slow ops can take advantage
