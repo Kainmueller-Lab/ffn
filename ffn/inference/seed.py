@@ -25,6 +25,7 @@ import numpy as np
 from scipy import ndimage
 import skimage
 import skimage.feature
+from skimage import measure, color
 
 from . import storage
 
@@ -216,6 +217,43 @@ class PolicyPeaks2d(BaseSeedPolicy):
         sorted([(z, y, x) for z, y, x in self.coords], reverse=self.sort_reverse))
 
     logging.info('2d peaks: found %d total local maxima', self.coords.shape[0])
+
+
+class PolicyFlylight(BaseSeedPolicy):
+
+  def _init_coords(self):
+    # convert to greyscale
+    image_grey = color.rgb2gray(self.canvas.image)
+    # threshold
+    fg_mask = image_grey > 0.2
+    # filter small components
+    def replace(array, old_values, new_values):
+      values_map = np.arange(int(array.max() + 1), dtype=new_values.dtype)
+      values_map[old_values] = new_values
+      return values_map[array]
+
+    def remove_small_components(mask, size):
+      labeled = measure.label(mask)
+      labels, counts = np.unique(labeled, return_counts=True)
+      labels = labels[counts <= size]
+      labeled = replace(
+            labeled,
+            np.array(labels),
+            np.array([0] * len(labels))
+            )
+      print('removing %i of small components.' % len(labels))
+      mask = labeled > 0
+      return mask
+    fg_mask = remove_small_components(fg_mask, 200)
+
+    # distance transform
+    fg_dist = ndimage.distance_transform_edt(fg_mask)
+
+    # take local max
+    fg_local_max = skimage.feature.peak_local_max(fg_dist, min_distance=5)
+    # get coordinates
+    #coords = np.asarray(np.where(fg_local_max > 0)).T
+    self.coords = fg_local_max
 
 
 class PolicyMax(BaseSeedPolicy):

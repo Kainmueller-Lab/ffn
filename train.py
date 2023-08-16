@@ -131,7 +131,7 @@ flags.DEFINE_list('image_offset_scale_map', None,
                   'Every entry in the list is a colon-separated tuple of: '
                   'volume_label, offset, scale.')
 
-flags.DEFINE_list('permutable_axes', ['0', '1', '2'],
+flags.DEFINE_list('permutable_axes', ['1', '2'],
                   'List of integers equal to a subset of [0, 1, 2] specifying '
                   'which of the [z, y, x] axes, respectively, may be permuted '
                   'in order to augment the training data.')
@@ -366,7 +366,6 @@ def define_data_input(model, queue_batch=None):
   image_volume_map = {}
   for vol in FLAGS.data_volumes.split(','):
     volname, path, dataset = vol.split(':')
-    print("path: ", path)
     if path.endswith(".hdf") or path.endswith(".h5"):
       image_volume_map[volname] = h5py.File(path)[dataset]
     elif path.endswith(".zarr"):
@@ -637,7 +636,7 @@ def train_ffn(model_cls, **model_kwargs):
         save_flags()
 
       summary_writer = None
-      saver = tf.train.Saver(keep_checkpoint_every_n_hours=0.25)
+      saver = tf.train.Saver(keep_checkpoint_every_n_hours=1) #0.25)
       scaffold = tf.train.Scaffold(saver=saver)
       with tf.train.MonitoredTrainingSession(
           master=FLAGS.master,

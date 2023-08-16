@@ -23,6 +23,7 @@ import re
 import tempfile
 
 import h5py
+import zarr
 import numpy as np
 from tensorflow.io import gfile
 import tensorstore as ts
@@ -72,7 +73,10 @@ def decorated_volume(settings, **kwargs):
     if len(path) != 2:
       raise ValueError('hdf5 volume_path should be specified as file_path:'
                        'hdf5_internal_dataset_path.  Got: ' + settings.hdf5)
-    volume = h5py.File(path[0])[path[1]]
+    if path[0].endswith(".zarr"):
+      volume = zarr.open(path[0], "r")[path[1]]
+    else:
+      volume = h5py.File(path[0])[path[1]]
   elif settings.HasField('tensorstore'):
     volume = SyncAdapter(ts.open(json.loads(settings.tensorstore)).result())
   else:

@@ -101,8 +101,13 @@ class Alignment(object):
     del forward  # forward and inverse are identical for identity transforms
 
     # If the source and destination geometries are the same, just return source
+    if source.ndim == 4:
+        # heads up: assumes channels last
+        src_size = source.shape[:-1]
+    else:
+        src_size = source.shape
     if np.all(np.array(src_corner) == np.array(dst_corner)) and np.all(
-        np.array(source.shape) == np.array(dst_size)):
+        np.array(src_size) == np.array(dst_size)):
       return source
 
     # Otherwise, use fill value for OOB regions.

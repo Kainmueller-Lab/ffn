@@ -1,11 +1,12 @@
 #!/bin/bash
 
 root=/nrs/saalfeld/maisl/flylight_benchmark/ffn/data/completely
-in_dir=$root/partitions
-out_dir=$root/coordinates
+in_dir=$root/partitions_lom_32
+out_dir=$root/coordinates_lom_32
 in_key=volumes/af
+lom=32
 
-log_dir=$root/log
+log_dir=$root/log_lom_32
 samples=($(cat $root/train_samples.txt ))
 
 mkdir $out_dir
@@ -29,5 +30,5 @@ done
 echo $partition_files
 log_file=$log_dir/log_coordinates.out
 echo $log_file
-bsub -n 10 -W 12:00 -o $log_file python build_coordinates.py --partition_volumes $partition_files --coordinate_output $out_dir/coords --margin 24,24,24
+bsub -n 10 -W 12:00 -o $log_file python build_coordinates.py --partition_volumes $partition_files --coordinate_output $out_dir/coords --margin $lom,$lom,$lom
 

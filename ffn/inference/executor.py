@@ -144,7 +144,7 @@ class ThreadingBatchExecutor(BatchExecutor):
     # Arrays fed to TF.
     self.input_seed = np.zeros([batch_size] + self._input_seed_size + [1],
                                dtype=np.float32)
-    self.input_image = np.zeros([batch_size] + self._input_image_size + [1],
+    self.input_image = np.zeros([batch_size] + self._input_image_size + [3],
                                 dtype=np.float32)
     self.th_executor = None
 
@@ -197,8 +197,10 @@ class ThreadingBatchExecutor(BatchExecutor):
           else:
             client_id, seed, image, fetches = data
             l = len(ready)
+            print("in executor: ", l, seed.shape, image.shape)
+            print(self.input_seed.shape, self.input_image.shape, self.input_image[l,...].shape)
             self.input_seed[l, ..., 0] = seed
-            self.input_image[l, ..., 0] = image
+            self.input_image[l, ...] = image
             ready.append(client_id)
 
       if ready:

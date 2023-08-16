@@ -41,6 +41,7 @@ from tensorflow.io import gfile
 from ..training.import_util import import_symbol
 from ..utils import bounding_box
 from ..utils import ortho_plane_visualization
+import pdb
 
 MSEC_IN_SEC = 1000
 MAX_SELF_CONSISTENT_ITERS = 32
@@ -233,7 +234,7 @@ class Canvas(object):
 
     self._keep_history = keep_history
     self.corner_zyx = corner_zyx
-    self.shape = image.shape
+    self.shape = image.shape[:-1]
 
     if restrictor is None:
       self.restrictor = movement.MovementRestrictor()
@@ -584,7 +585,6 @@ class Canvas(object):
           continue
 
         self.log_info('Starting segmentation at %r (zyx)', pos)
-
         # Try segmentation.
         seg_start = time.time()
         num_iters = self.segment_at(pos)
@@ -838,7 +838,6 @@ class Runner(object):
             request.init_segmentation, cache_max_bytes=int(1e8))
       else:
         self.init_seg_volume = None
-
       def _open_or_none(settings):
         if settings.WhichOneof('volume_path') is None:
           return None
@@ -1020,10 +1019,12 @@ class Runner(object):
       def get_data_3d(volume, bbox):
         slc = bbox.to_slice()
         if volume.ndim == 4:
-          slc = np.index_exp[0:1] + slc
+          #slc = np.index_exp[0:1] + slc
+          slc = np.index_exp[:] + slc
         data = volume[slc]
         if data.ndim == 4:
-          data = data.squeeze(axis=0)
+          data = np.moveaxis(data, 0, -1)
+        #  data = data.squeeze(axis=0)
         return data
       src_bbox = bounding_box.BoundingBox(
           start=src_corner[::-1], size=src_size[::-1])
@@ -1062,8 +1063,8 @@ class Runner(object):
       logging.info('Could not match histogram: %r', e)
       return None, None
 
-    image = (image.astype(np.float32) -
-             self.request.image_mean) / self.request.image_stddev
+    #image = (image.astype(np.float32) -
+    #         self.request.image_mean) / self.request.image_stddev
     if restrictor == self.ALL_MASKED:
       return None, None
 
