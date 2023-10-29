@@ -27,6 +27,8 @@ import zarr
 import numpy as np
 from tensorflow.io import gfile
 import tensorstore as ts
+from skimage import io
+import colorcet as cc
 
 from . import align
 from . import segmentation
@@ -132,6 +134,31 @@ def dequantize_probability(prob):
   return ret
 
 
+def hex_to_rgb(hex):
+    hex = hex.lstrip('#')
+    return np.array([int(hex[i:i + 2], 16) for i in (0, 2, 4)])
+
+
+def color(src, colormap=None):
+
+    labels = np.unique(src)
+    colored = np.stack(
+        [np.zeros_like(src), np.zeros_like(src), np.zeros_like(src)],
+        axis=-1)
+
+    for i, label in enumerate(labels):
+        if label == 0:
+            continue
+        if colormap == 'glasbey':
+            label_color = hex_to_rgb(cc.glasbey_light[i])
+        else:
+            label_color = np.random.randint(0, 255, 3)
+        idx = src == label
+        colored[idx, :] = label_color
+
+    return colored
+
+
 def save_subvolume(labels, origins, output_path, **misc_items):
   """Saves an FFN subvolume.
 
@@ -143,13 +170,32 @@ def save_subvolume(labels, origins, output_path, **misc_items):
     **misc_items: (optional) additional values to save
         in the output file
   """
-  seg = segmentation.reduce_id_bits(labels)
   gfile.makedirs(os.path.dirname(output_path))
-  with atomic_file(output_path) as fd:
-    np.savez_compressed(fd,
-                        segmentation=seg,
-                        origins=origins,
-                        **misc_items)
+  
+  if output_path.endswith(".hdf"):
+    # clean up segmentation, which is done when reading npz otherwise
+    segmentation.clean_up(labels)
+    seg = segmentation.reduce_id_bits(labels)
+
+    outf =  h5py.File(output_path, "w")
+    outf.create_dataset(
+          "volumes/instances",
+          data=seg.astype(np.int32),
+          dtype=np.int32,
+          chunks=True,
+          compression="gzip"
+          )
+    outf.close()
+    #also save mip
+    mip = color(np.max(seg, axis=0))
+    io.imsave(output_path.replace(".hdf", ".png"), mip.astype(np.uint8))
+  else:
+    seg = segmentation.reduce_id_bits(labels)
+    with atomic_file(output_path) as fd:
+      np.savez_compressed(fd,
+              segmentation=seg,
+              origins=origins,
+              **misc_items)
 
 
 def legacy_subvolume_path(output_dir, corner, suffix):

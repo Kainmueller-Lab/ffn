@@ -44,7 +44,8 @@ def main(unused_argv):
     gfile.makedirs(request.segmentation_output_dir)
 
   bbox = bounding_box_pb2.BoundingBox()
-  text_format.Parse(FLAGS.bounding_box, bbox)
+  if FLAGS.bounding_box is not None:
+    text_format.Parse(FLAGS.bounding_box, bbox)
 
   runner = inference.Runner()
   runner.start(request)

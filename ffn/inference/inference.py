@@ -41,7 +41,7 @@ from tensorflow.io import gfile
 from ..training.import_util import import_symbol
 from ..utils import bounding_box
 from ..utils import ortho_plane_visualization
-import pdb
+import h5py
 
 MSEC_IN_SEC = 1000
 MAX_SELF_CONSISTENT_ITERS = 32
@@ -188,7 +188,8 @@ class Canvas(object):
                keep_history=False,
                checkpoint_path=None,
                checkpoint_interval_sec=0,
-               corner_zyx=None):
+               corner_zyx=None,
+               raw_path=None):
     """Initializes the canvas.
 
     Args:
@@ -217,6 +218,7 @@ class Canvas(object):
     self.image = image
     self.executor = tf_executor
     self._exec_client_id = None
+    self.raw_path = raw_path.split(":")[0]
 
     self.options = inference_pb2.InferenceOptions()
     self.options.CopyFrom(options)
@@ -994,6 +996,9 @@ class Runner(object):
     subvol_counters = self.counters.get_sub_counters()
     with timer_counter(subvol_counters, 'load-image'):
       logging.info('Process subvolume: %r', corner)
+      # if subvolume bounding box is not set, then use volume size
+      if np.all(np.array(corner) == 0) and np.all(np.array(subvol_size) == 0):
+          subvol_size = self._image_volume.shape[1:]
 
       # A Subvolume with bounds defined by (src_size, src_corner) is guaranteed
       # to result in no missing data when aligned to (dst_size, dst_corner).
@@ -1159,8 +1164,20 @@ class Runner(object):
     # segmentation is saved, as `save_subvolume` will create any necessary
     # directories.
     prob = unalign_image(canvas.seg_prob)
-    with storage.atomic_file(prob_path) as fd:
-      np.savez_compressed(fd, qprob=prob)
+    if prob_path is None:
+        return
+    elif prob_path.endswith(".hdf"):
+      with h5py.File(prob_path) as outf:
+        outf.create_dataset(
+                "volumes/instances_prob",
+                data=prob,
+                dtype=prob.dtype,
+                chunks=True,
+                compression="gzip"
+                )
+    else:
+      with storage.atomic_file(prob_path) as fd:
+        np.savez_compressed(fd, qprob=prob)
 
   def run(self, corner, subvol_size, reset_counters=True):
     """Runs FFN inference over a subvolume.
@@ -1176,18 +1193,25 @@ class Runner(object):
     """
     if reset_counters:
       self.counters.reset()
-
-    seg_path = storage.segmentation_path(
-        self.request.segmentation_output_dir, corner)
-    prob_path = storage.object_prob_path(
-        self.request.segmentation_output_dir, corner)
+    # if bounding box is not given, save whole volume as hdf with sample name
+    if np.all(np.array(subvol_size) == 0) and np.all(np.array(subvol_size) == 0) \
+            and self.request.image.HasField("hdf5"):
+        sample_name = os.path.basename(self.request.image.hdf5.split(".")[0])
+        seg_path = os.path.join(self.request.segmentation_output_dir, 
+                sample_name + ".hdf")
+        prob_path = None
+    else:
+        seg_path = storage.segmentation_path(
+            self.request.segmentation_output_dir, corner)
+        prob_path = storage.object_prob_path(
+            self.request.segmentation_output_dir, corner)
     cpoint_path = storage.checkpoint_path(
         self.request.segmentation_output_dir, corner)
 
     if gfile.exists(seg_path):
       return None
 
-    canvas, alignment = self.make_canvas(corner, subvol_size)
+    canvas, alignment = self.make_canvas(corner, subvol_size, raw_path=self.request.image.hdf5)
     if canvas is None:
       return None
 
